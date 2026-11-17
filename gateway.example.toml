@@ -1,0 +1,57 @@
+# LarkGateway routes. Copy to gateway.toml beside lark-gateway.exe.
+# Secrets never go in this file: name the .env key that holds them.
+# Check it with:  lark-gateway -check
+
+[gateway]
+spool_dir = "spool"            # events wait here until their command succeeds
+log_dir = "logs"
+health_addr = "127.0.0.1:8791" # http://127.0.0.1:8791/ shows health; also stops a second copy
+memory_limit_mb = 32
+keep_done_days = 14
+
+[alert]
+app = "mybot"                  # which app (bot) posts gateway problems
+chat_id = "oc_REPLACE_ME"      # the chat that receives them; your own DM with the bot works
+down_minutes = 5               # alert when an app stays disconnected this long
+
+# ---- One [[app]] per Lark app (bot). Only ONE connection may exist per app,
+# ---- anywhere: never run a second copy of an app on another machine.
+[[app]]
+name = "mybot"
+app_id = "cli_REPLACE_ME"
+secret_env = "MYBOT_APP_SECRET" # the .env key holding the app secret
+domain = "lark"                # "lark" = open.larksuite.com, "feishu" = open.feishu.cn
+# subscribe_bitable = ["<Base token>"]   # Bases whose record changes this app should receive
+
+# ---- One [[route]] per job. The event JSON arrives on the command's stdin.
+# ---- The command also gets GATEWAY_ROUTE, GATEWAY_REASON (event, catchup,
+# ---- tick), GATEWAY_EVENT_TYPE, GATEWAY_EVENT_ID, and only the env keys listed.
+# ---- On a route with a tick, every run also gets GATEWAY_NEXT_RUN_FILE: write
+# ---- an RFC 3339 time or "none" there to say when the tick is next needed
+# ---- (kept between tick.every and tick.max_wait, default "6h").
+
+# A file someone posts in one chat: download it and reply.
+[[route]]
+name = "chat-files"
+app = "mybot"
+event = "im.message.receive_v1"
+match = { "event.message.chat_id" = ["oc_REPLACE_ME"], "event.message.message_type" = ["file"], "event.sender.sender_type" = ["user"] }
+command = ["python", "handle_file.py", "event"]
+catchup = ["python", "handle_file.py", "catchup"]   # runs after every (re)connect
+workdir = "C:\\jobs\\files"
+timeout = "10m"
+retries = 3
+pass_app_credentials = true    # the command gets the app's id and secret, to download and reply
+env = ["MY_DB_PASSWORD"]       # only these .env keys reach the command
+
+# A record change in a Base (needs subscribe_bitable on the app; see README,
+# "Base record changes", for the scopes Lark requires).
+# [[route]]
+# name = "base-changes"
+# app = "mybot"
+# event = "drive.file.bitable_record_changed_v1"
+# match = { "event.file_token" = ["<Base token>"], "event.table_id" = ["<table id>"] }
+# command = ["python", "on_change.py", "event"]
+# catchup = ["python", "on_change.py", "catchup"]
+# tick = { every = "10m", command = ["python", "on_change.py", "tick"] }
+# workdir = "C:\\jobs\\base"

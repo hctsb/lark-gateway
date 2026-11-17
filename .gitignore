@@ -1,0 +1,11 @@
+# secrets and runtime state never go in git
+.env
+*.env
+gateway.toml
+spool/
+logs/
+state/
+*.exe
+*.exe~
+*.log
+tools/probe-seen.ndjson

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>LarkGateway, small sizes: the lark alone</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2E4A7A"/>
+      <stop offset="1" stop-color="#1F2A44"/>
+    </linearGradient>
+    <linearGradient id="bird" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#2B9C9C"/>
+      <stop offset="1" stop-color="#5CC8C8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#tile)"/>
+
+  <g transform="translate(250 262) scale(1.22) translate(-273 -244)">
+  <!-- the lark, rising to the upper right -->
+  <g fill="#4FBFBF">
+    <!-- far wing, behind the body -->
+    <path d="M266 234 C 258 188, 282 142, 330 110 C 330 158, 316 200, 296 232 Z" opacity="0.8"/>
+    <!-- body: head at upper right, tail streaming to lower left -->
+    <path d="M356 186
+             C 372 182, 388 186, 398 196
+             L 428 194
+             L 400 208
+             C 396 236, 372 260, 334 280
+             C 292 302, 240 318, 196 334
+             L 118 370
+             L 150 330
+             L 112 326
+             L 190 300
+             C 234 272, 276 236, 312 208
+             C 326 196, 340 190, 356 186 Z"/>
+    <!-- near wing, swept up and back -->
+    <path d="M300 236
+             C 270 206, 228 178, 150 160
+             C 196 150, 246 152, 286 168
+             C 312 178, 330 196, 340 214 Z"/>
+  </g>
+</g>
+</svg>
