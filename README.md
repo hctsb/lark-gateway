@@ -2,14 +2,46 @@
 
 # LarkGateway
 
-A small Go service that holds Lark's (Feishu's) persistent connection for each of your Lark
-apps and runs a command you choose for each event a rule matches. Your machine needs no
-public address, nothing polls Lark, and no event is lost to a crash, a reboot or a dropped
-connection.
+**Want a script or program on your own computer to run when something happens in Lark?**
+Someone edits a field in a Base, sends your bot a message, drops a file in a chat. This is
+the thing for it.
 
-It makes no business decisions. A route says: *for this app, this event type, matching these
-fields, run this command with the event JSON on stdin.* What the event means is your
-command's job.
+```
+   Lark (cloud)                          Your computer
+ ┌───────────────────┐               ┌──────────────────────────────┐
+ │ a field is edited │               │  LarkGateway                 │
+ │ a message arrives │ ───────────►  │   "a file arrived in chat X" │
+ │ a file is posted  │   instantly   │      → runs import_file.py   │
+ └───────────────────┘               │   "row changed in Base Y"    │
+                                     │      → runs update_stock.bat │
+                                     └──────────────────────────────┘
+```
+
+Some things people use it for:
+
+- A colleague sends the bot a bank statement → your script imports it into your accounting
+  system and replies "done, 42 lines imported".
+- Someone ticks "Approve" on a row in a Lark Base → your program generates the PDF and sends it.
+- A customer table in a Base is edited → your server refreshes its own copy straight away,
+  instead of re-reading the whole table every few minutes.
+
+You don't need a public web address, a cloud server or any programming in Go. You write a
+small rules file: *"when this happens, run that"*, and your script can be anything that runs
+on your computer: Python, PowerShell, a `.bat` file, an `.exe`. LarkGateway hands it the
+details of what happened.
+
+If your script crashes, the computer restarts or the internet drops for an hour, nothing is
+lost: every event is saved to disk first, retried if it fails, and anything missed while
+offline is caught up when the connection comes back.
+
+## How it works, in one paragraph
+
+LarkGateway is a small Go service. It keeps one live connection open to Lark for each of
+your Lark apps (bots), using Lark's own "persistent connection" mode, so Lark pushes events
+to you the moment they happen; your computer only makes an outgoing connection, like a
+browser does. For each event, your rules (`gateway.toml`) decide which command to run, and
+the event's details arrive on that command's input as JSON. LarkGateway itself makes no
+business decisions: what an event *means* is your script's job.
 
 > Provided as-is. We run it in production for our own Lark apps and maintain it for that
 > use. Issues and pull requests are welcome, but there is no promise of support.
