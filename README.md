@@ -19,14 +19,11 @@
 Want a script or program on your own computer to run when something happens in Lark? Someone edits a field in a Base, sends your bot a message, drops a file in a chat. **This is the thing for it.**
 
 ```
-   Lark (cloud)                          Your computer
- ┌───────────────────┐               ┌──────────────────────────────┐
- │ a field is edited │               │  LarkGateway                 │
- │ a message arrives │ ───────────►  │   "a file arrived in chat X" │
- │ a file is posted  │   instantly   │      → runs import_file.py   │
- └───────────────────┘               │   "row changed in Base Y"    │
-                                     │      → runs update_stock.bat │
-                                     └──────────────────────────────┘
+In Lark                     On your computer
+
+a message arrives ─┐
+a field is edited ─┼──► LarkGateway ──► your script
+a file is posted  ─┘    (rules file)    .py .ps1 .bat .exe
 ```
 
 Some things people use it for:
@@ -68,14 +65,27 @@ You write a small rules file, *"when this happens, run that"*, and your script c
 ## How it works
 
 ```
-                 ┌──────────────────────────── LarkGateway ────────────────────────────┐
- Lark ──event──► │ 1. match a route ─► 2. save to spool/<route>/pending ─► 3. tell Lark │
-                 │                                       │                     "got it" │
-                 │                                       ▼                              │
-                 │ 4. run your command, event JSON on stdin, one at a time, oldest first│
-                 │        exit 0 ─► spool/<route>/done     (kept 14 days)              │
-                 │        fails  ─► try again (1, 5, 15 min) ─► failed/ + alert         │
-                 └─────────────────────────────────────────────────────────────────────┘
+Lark sends an event
+      │
+      ▼
+1. Does a route match it?  ── no ──► ignored
+      │ yes
+      ▼
+2. Save it to spool/<route>/pending/
+      │
+      ▼
+3. Tell Lark "got it"
+      │
+      ▼
+4. Run your command (event JSON on stdin),
+   one event at a time, oldest first
+      │
+      ├── exit 0 ──► done/  (kept 14 days)
+      │
+      └── failed ──► try again after 1, then 5 min
+                          │ still failing
+                          ▼
+                     failed/ + alert in Lark
 ```
 
 - **Apps.** Each `[[app]]` is one Lark app (bot). The gateway holds exactly one connection for it. Lark's SDK reconnects by itself; if it gives up, the gateway starts it again a minute later.
