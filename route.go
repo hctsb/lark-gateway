@@ -35,6 +35,11 @@ type Route struct {
 	mu   sync.Mutex
 	seen map[string]bool // event ids already spooled, so a redelivery is ignored
 
+	// Owned by Work's single event worker, never by Spool or Tick. A terminal
+	// command must not run again while its archive operation is being retried.
+	finalizing  map[string]*finalization
+	spoolErrors map[string]string
+
 	// When the tick next runs. A command may say (see takeReport); until one
 	// does, it is every tick.every.
 	nextMu  sync.Mutex
@@ -163,32 +168,47 @@ func (r *Route) pendingCount() int {
 }
 
 func (r *Route) drain(ctx context.Context) {
+	// Visit each file at most once per wake, including new arrivals before
+	// catch-up. A completed event awaiting archival cannot spin or block others.
+	visited := make(map[string]bool)
 	for ctx.Err() == nil {
 		names, _ := filepath.Glob(filepath.Join(r.dir, "pending", "*.json"))
-		if len(names) == 0 {
-			return
-		}
 		sort.Strings(names) // the name starts with the arrival time
 		r.gw.health.setPending(r.cfg.Name, len(names))
-		r.process(ctx, names[0])
+		progress := false
+		for _, path := range names {
+			if ctx.Err() != nil {
+				return
+			}
+			if visited[path] {
+				continue
+			}
+			visited[path], progress = true, true
+			r.process(ctx, path)
+		}
+		if !progress {
+			return
+		}
 	}
 }
 
 // process runs one spooled event, retrying with backoff; the route waits
 // meanwhile, so events are always handled in the order they arrived.
 func (r *Route) process(ctx context.Context, path string) {
+	if ctx.Err() != nil || r.resumeFinalization(path) {
+		return
+	}
 	body, err := os.ReadFile(path)
 	if err != nil {
-		slog.Error("unreadable spool file moved to failed", "route", r.cfg.Name, "file", path, "err", err)
-		r.move(path, "failed")
+		slog.Error("unreadable spool file; awaiting failed archive", "route", r.cfg.Name, "file", path, "err", err)
+		r.finish(path, "failed", "unreadable spool file: "+err.Error())
 		return
 	}
 	id := eventIDFromName(path)
 	var lastErr error
 	for attempt := 1; attempt <= r.cfg.Retries; attempt++ {
 		if lastErr = r.run(ctx, r.cfg.Command, body, "event", id); lastErr == nil {
-			r.move(path, "done")
-			r.gw.health.routeOK(r.cfg.Name)
+			r.finish(path, "done", "")
 			return
 		}
 		if ctx.Err() != nil {
@@ -204,18 +224,16 @@ func (r *Route) process(ctx context.Context, path string) {
 			}
 		}
 	}
-	r.move(path, "failed")
-	msg := fmt.Sprintf("Route %s: event %s failed %d times and was set aside (spool\\%s\\failed). Last error: %v",
+	r.finish(path, "failed", lastErr.Error())
+	msg := fmt.Sprintf("Route %s: event %s failed %d times; no more command retries (archive target spool\\%s\\failed). Last error: %v",
 		r.cfg.Name, id, r.cfg.Retries, r.cfg.Name, lastErr)
 	r.gw.health.routeFailed(r.cfg.Name, lastErr.Error())
 	r.gw.alert(msg, "failed:"+r.cfg.Name)
 }
 
-func (r *Route) move(path, to string) {
+func (r *Route) move(path, to string) error {
 	dest := filepath.Join(r.dir, to, filepath.Base(path))
-	if err := os.Rename(path, dest); err != nil {
-		slog.Error("could not move spool file", "file", path, "to", to, "err", err)
-	}
+	return os.Rename(path, dest)
 }
 
 // Tick runs the route's tick command when it is next due: every tick.every,
