@@ -457,7 +457,19 @@ The health page looks like this:
 
 **A command works by hand but fails in the gateway.** The command gets a minimal environment (see [What your command receives](#what-your-command-receives)). Pass what it needs with `env`, use full paths, and remember the service account (LocalSystem by default on Windows) may not see your user's drives or Python.
 
-**Events pile up in `pending/`.** A route runs one event at a time. A slow or hanging command holds up the rest until it finishes or hits `timeout`.
+**Events pile up in `pending/`.** A route runs one command at a time. A slow or hanging command holds up the rest until it finishes or hits `timeout`. An event that has already succeeded, or exhausted its command retries, may also remain pending while its archive move is blocked.
+
+### Blocked archive moves and completion receipts
+
+A terminal command gets a synced completion receipt beside its pending event (`<event>.json.finalized`). If moving the event to `done/` or `failed/` fails—for example, a Windows reader opened the file without delete sharing—the worker **retries the move, not the command**, at most once per minute per event in that process. Later events can still run in arrival order. A restart reads the receipt and resumes only archival; it does not reset an exhausted command's retry budget.
+
+While a spool fault is outstanding, the route health contains `spool_blocked` and `spool_error`, and the gateway sends a throttled alert. Check these fields even when a later event or tick has a recent `last_ok`. Fix the file lock, permissions, destination conflict or disk problem and leave the event and receipt in place; the next archive retry completes without repeating the command. The event remains in `done/` or `failed/` afterward, preserving redelivery deduplication.
+
+A `.finalized.tmp` is an interrupted receipt publication. A valid one can be recovered automatically. An unreadable, malformed or unsupported receipt holds the command and raises a spool error: **do not delete it just to clear the queue**. Inspect the consumer's result and repair/reconcile the completion state first. If intentionally replaying an event, stop the gateway, verify that the business operation is safe to repeat, and reconcile any orphaned receipt left after a cleanup warning before following the replay instructions above.
+
+Before upgrading, reconcile existing stuck pending events that have no receipt: the new version cannot infer whether an older version already performed their business effects.
+
+This is still **at-least-once processing, not an exactly-once transaction with the consumer**. A crash between an external business effect and the durable receipt can replay the event. If both receipt persistence and archival fail, in-process terminal state prevents an immediate replay, but health explicitly warns that restarting may replay it; restore persistence or reconcile the business outcome before restarting. Consumers that cannot tolerate duplicates must use `GATEWAY_EVENT_ID` as an idempotency key. Completion receipts from the new version must be reconciled before rolling back to a version that does not understand them.
 
 ### Finding a `chat_id`
 

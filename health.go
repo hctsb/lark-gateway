@@ -33,6 +33,9 @@ type RouteHealth struct {
 	LastFail time.Time `json:"last_fail,omitempty"`
 	LastErr  string    `json:"last_error,omitempty"`
 	NextTick time.Time `json:"next_tick,omitempty"`
+	// Outstanding spool faults remain visible even when another event or tick succeeds.
+	SpoolBlocked int    `json:"spool_blocked,omitempty"`
+	SpoolError   string `json:"spool_error,omitempty"`
 }
 
 func newHealth(cfg *Config) *Health {
@@ -97,6 +100,12 @@ func (h *Health) setNextTick(route string, at time.Time) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.Routes[route].NextTick = at
+}
+
+func (h *Health) spoolState(route string, blocked int, msg string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Routes[route].SpoolBlocked, h.Routes[route].SpoolError = blocked, msg
 }
 
 func (h *Health) setPending(route string, n int) {
